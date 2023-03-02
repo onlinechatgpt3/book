@@ -1,0 +1,486 @@
+import SpriteKit
+
+class GameScene: SKScene {
+    private let zombieSpeed: CGFloat = 100.0
+    private let humanSpeed: CGFloat = 70.0
+    
+    private var zombie: SKSpriteNode?
+    private var humans: [SKSpriteNode] = []
+    private var attacking: Bool = false
+    
+    override func didMove(to view: SKView) {
+        // Создаем текстуры для зомби и людей
+        let zombieTexture = createPixelTexture(size: CGSize(width: 20, height: 20), color: UIColor.red)
+        let humanTexture = createPixelTexture(size: CGSize(width: 20, height: 20), color: UIColor.blue)
+        
+        // Создаем спрайт для зомби
+        zombie = SKSpriteNode(texture: zombieTexture)
+        if let zombie = zombie {
+            zombie.position = CGPoint(x: frame.midX - 50, y: frame.midY - 50)
+            addChild(zombie)
+        }
+        
+        // Создаем 10 спрайтов для людей
+        for i in 0..<10 {
+            let human = SKSpriteNode(texture: humanTexture)
+            human.position = CGPoint(x: frame.midX + CGFloat(50 * i), y: frame.midY + CGFloat(50 * i))
+            addChild(human)
+            humans.append(human)
+        }
+        
+        // Создаем кнопку для атаки
+        let attackButton = SKLabelNode(text: "Attack")
+        attackButton.position = CGPoint(x: frame.maxX - 50, y: frame.maxY - 50)
+        addChild(attackButton)
+    }
+    
+    override func update(_ currentTime: TimeInterval) {
+        // Вычисляем направление для зомби и перемещаем его в соответствии с ним
+        if let zombie = zombie {
+            let touchLocation = convertPoint(fromView: CGPoint(x: frame.midX, y: frame.midY))
+            let offset = touchLocation - zombie.position
+            let direction = offset.normalized()
+            let velocity = direction * zombieSpeed
+            zombie.position += velocity * CGFloat(currentTime)
+        }
+        
+        // Если зомби атакует, перемещаем его в направлении ближайшего человека
+        if attacking {
+            if let zombie = zombie, let closestHuman = getClosestHuman(to: zombie) {
+                let offset = closestHuman.position - zombie.position
+                let direction = offset.normalized()
+                let velocity = direction * zombieSpeed
+                zombie.position += velocity * CGFloat(currentTime)
+                
+                // Если зомби догнал человека, удаляем его из массива людей
+                if offset.length() < 10 {
+                    closestHuman.removeFromParent()
+                    if let index = humans.index(of: closestHuman) {
+                        humans.remove(at: index)
+                    }
+                }
+            }
+        }
+        
+        // Бежим от зомби
+        for human in humans {
+            let offset = human.position - zombie!.position
+            let distance = offset.length()
+            let direction = offset.normalized()
+            let velocity = direction * humanSpeed
+            
+            // Если зомби находится ближе, чем определенная дистан
+            if distance < 200 {
+                human.position += velocity * CGFloat(currentTime)
+            }
+        }
+    }
+    
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Если зомби уже атакует, не обрабатываем новые касания
+        if attacking {
+            return
+        }
+        
+        // Если было касание на экран, перемещаем зомби в точку касания
+        if let touch = touches.first {
+            let touchLocation = touch.location(in: self)
+            if let zombie = zombie {
+                let offset = touchLocation - zombie.position
+                let direction = offset.normalized()
+                let velocity = direction * zombieSpeed
+                zombie.position += velocity * CGFloat(1.0/60.0)
+            }
+        }
+        
+        // Обрабатываем касание на кнопку атаки
+        let location = touches.first?.location(in: self)
+        let nodes = self.nodes(at: location!)
+        for node in nodes {
+            if node is SKLabelNode {
+                attacking = true
+            }
+        }
+    }
+    
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Если зомби уже атакует, не обрабатываем новые касания
+        if attacking {
+            return
+        }
+        
+        // Если было касание на экран, перемещаем зомби в точку касания
+        if let touch = touches.first {
+            let touchLocation = touch.location(in: self)
+            if let zombie = zombie {
+                let offset = touchLocation - zombie.position
+                let direction = offset.normalized()
+                let velocity = direction * zombieSpeed
+                zombie.position += velocity * CGFloat(1.0/60.0)
+            }
+        }
+    }
+    
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Сбрасываем флаг атаки, если было касание на экран
+        attacking = false
+    }
+    
+    private func createPixelTexture(size: CGSize, color: UIColor) -> SKTexture {
+        let pixel = CGRect(origin: CGPoint.zero, size: size)
+        UIGraphicsBeginImageContext(size)
+        let context = UIGraphicsGetCurrentContext()
+        context?.setFillColor(color.cgColor)
+        context?.fill(pixel)
+        let image = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return SKTexture(image: image!)
+    }
+    
+    private func getClosestHuman(to zombie: SKSpriteNode) -> SKSpriteNode? {
+        var closestHuman: SKSpriteNode? = nil
+        var closestDistance: CGFloat = CGFloat.greatestFiniteMagnitude
+        for human in humans {
+            let offset = human.position - zombie.position
+            let distance = offset.length()
+            if distance < closestDistance {
+                closestHuman = human
+                closestDistance = distance
+            }
+        }
+        return closestHuman
+    }
+}
+class GameViewController: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        // Создаем сцену и добавляем ее на view контроллера
+        let scene = GameScene(size: view.bounds.size)
+        let skView = view as! SKView
+        skView.showsFPS = true
+        skView.showsNodeCount = true
+        skView.ignoresSiblingOrder = true
+        scene.scaleMode = .resizeFill
+        skView.presentScene(scene)
+        
+        // Создаем кнопку атаки
+        let attackButton = SKLabelNode(text: "Attack")
+        attackButton.position = CGPoint(x: view.bounds.width - 80, y: 60)
+        attackButton.fontColor = .red
+        attackButton.fontSize = 30
+        scene.addChild(attackButton)
+        
+        // Создаем синих
+        for _ in 1...10 {
+            let human = SKSpriteNode(texture: scene.humanTexture)
+            human.position = CGPoint(x: CGFloat.random(in: 0...scene.frame.width),
+                                     y: CGFloat.random(in: 0...scene.frame.height))
+            human.color = .blue
+            human.colorBlendFactor = 1
+            scene.addChild(human)
+            scene.humans.append(human)
+        }
+    }
+    
+    override var shouldAutorotate: Bool {
+        return true
+    }
+    
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        return .portrait
+    }
+    
+    override var prefersStatusBarHidden: Bool {
+        return true
+    }
+}
+class GameScene: SKScene {
+    // Свойства для хранения текстур и спрайтов зомби и людей
+    var zombieTexture = SKTexture()
+    var humanTexture = SKTexture()
+    var zombies = [SKSpriteNode]()
+    var humans = [SKSpriteNode]()
+
+    override func didMove(to view: SKView) {
+        // Добавляем карту мира на сцену
+        let worldMap = SKSpriteNode(color: .gray, size: CGSize(width: 400, height: 200))
+        worldMap.position = CGPoint(x: frame.midX, y: frame.midY)
+        addChild(worldMap)
+        
+        // Загружаем текстуры
+        zombieTexture = createPixelTexture(size: CGSize(width: 20, height: 20), color: .red)
+        humanTexture = createPixelTexture(size: CGSize(width: 20, height: 20), color: .blue)
+        
+        // Создаем зомби
+        let zombie1 = createZombie(at: CGPoint(x: frame.midX - 50, y: frame.midY - 50))
+        let zombie2 = createZombie(at: CGPoint(x: frame.midX + 50, y: frame.midY + 50))
+        zombies = [zombie1, zombie2]
+        for zombie in zombies {
+            addChild(zombie)
+        }
+        
+        // Создаем живых
+        let human1 = createHuman(at: CGPoint(x: frame.midX - 100, y: frame.midY + 50))
+        let human2 = createHuman(at: CGPoint(x: frame.midX + 100, y: frame.midY - 50))
+        humans = [human1, human2]
+        for human in humans {
+            addChild(human)
+        }
+    }
+
+    override func update(_ currentTime: TimeInterval) {
+        // Движение зомби в направлении указателя мыши
+        if let mousePosition = lastMousePosition {
+            for zombie in zombies {
+                let angle = atan2(mousePosition.y - zombie.position.y,
+                                  mousePosition.x - zombie.position.x)
+                zombie.zRotation = angle - .pi / 2
+                
+                // Движение зомби в направлении указателя мыши
+                let direction = CGVector(dx: cos(angle), dy: sin(angle))
+                let moveAction = SKAction.move(by: direction, duration: 0.1)
+                zombie.run(moveAction)
+            }
+        }
+        
+        // Проверяем пересечение зомби с живыми
+        for zombie in zombies {
+            for human in humans {
+                if zombie.frame.intersects(human.frame) {
+                    // Зомби атакует живого
+                    let attackAction = SKAction.scale(to: 1.2, duration: 0.1)
+                    let returnAction = SKAction.scale(to: 1, duration: 0.1)
+                    let attackSequence = SKAction.sequence([attackAction, returnAction])
+                    human.run(attackSequence)
+                }
+            }
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        // Запоминаем позицию щелчка мыши
+        lastMousePosition = convertPoint(fromView: event.locationInWindow)
+        
+        // Атака зомби по кнопке
+        let nodesAtPoint = nodes(at: lastMousePosition)
+        for node in nodesAtPoint {
+            if let button = node as? SKLabel
+                if button.text == "Attack" {
+                    for zombie in zombies {
+                        let attackAction = SKAction.rotate(byAngle: .pi * 2, duration: 1)
+                        zombie.run(attackAction)
+                    }
+                }
+            }
+        }
+    }
+
+    // Создание текстуры пикселя заданного цвета и размера
+    func createPixelTexture(size: CGSize, color: NSColor) -> SKTexture {
+        let pixelImage = NSImage(size: size)
+        pixelImage.lockFocus()
+        color.drawSwatch(in: NSRect(x: 0, y: 0, width: size.width, height: size.height))
+        pixelImage.unlockFocus()
+        return SKTexture(image: pixelImage)
+    }
+
+    // Создание спрайта зомби
+    func createZombie(at position: CGPoint) -> SKSpriteNode {
+        let zombie = SKSpriteNode(texture: zombieTexture)
+        zombie.position = position
+        return zombie
+    }
+
+    // Создание спрайта живого
+    func createHuman(at position: CGPoint) -> SKSpriteNode {
+        let human = SKSpriteNode(texture: humanTexture)
+        human.position = position
+        return human
+    }
+
+    // Последняя позиция указателя мыши
+    var lastMousePosition: CGPoint?
+}
+override func update(_ currentTime: TimeInterval) {
+    // Called before each frame is rendered
+    // Проверяем, есть ли последняя позиция мыши
+    guard let lastMousePosition = lastMousePosition else {
+        return
+    }
+    
+    // Двигаем зомби в сторону последней позиции мыши
+    for zombie in zombies {
+        let angle = atan2(lastMousePosition.y - zombie.position.y, lastMousePosition.x - zombie.position.x)
+        let direction = CGVector(dx: cos(angle) * zombieSpeed, dy: sin(angle) * zombieSpeed)
+        zombie.physicsBody?.velocity = direction
+    }
+}
+}
+// Обработка нажатия на экран
+override func mouseDown(with event: NSEvent) {
+    // Получаем позицию нажатия на экран
+    let location = event.location(in: self)
+    
+    // Проверяем, на что было произведено нажатие
+    let nodesAtLocation = nodes(at: location)
+    for node in nodesAtLocation {
+        // Если был нажат зомби, двигаем его в направлении последнего щелчка мыши
+        if let zombie = node as? SKSpriteNode, zombie == zombies.first {
+            lastMousePosition = location
+            let angle = atan2(location.y - zombie.position.y, location.x - zombie.position.x)
+            let direction = CGVector(dx: cos(angle) * zombieSpeed, dy: sin(angle) * zombieSpeed)
+            zombie.physicsBody?.velocity = direction
+        }
+    }
+}
+
+// Создание кнопки
+func createButton(withText text: String, at position: CGPoint) -> SKSpriteNode {
+    let button = SKSpriteNode(texture: buttonTexture, color: .clear, size: buttonSize)
+    button.position = position
+    
+    let label = SKLabelNode(text: text)
+    label.fontName = "Helvetica Neue Bold"
+    label.fontSize = 16
+    label.fontColor = .white
+    label.verticalAlignmentMode = .center
+    button.addChild(label)
+    
+    addChild(button)
+    return button
+}
+}
+// Создание спрайта человека
+func createHuman(at position: CGPoint) -> SKSpriteNode {
+    let human = SKSpriteNode(texture: humanTexture)
+    human.position = position
+    human.color = .blue // Человек будет выделен синим цветом
+    human.colorBlendFactor = 0.7
+    human.physicsBody = SKPhysicsBody(circleOfRadius: humanTexture.size().width / 2)
+    human.physicsBody?.categoryBitMask = humanCategory
+    human.physicsBody?.collisionBitMask = wallCategory | humanCategory | zombieCategory
+    human.physicsBody?.contactTestBitMask = zombieCategory
+    
+    return human
+}
+
+// Создание спрайта стены
+func createWall(at position: CGPoint, size: CGSize) -> SKSpriteNode {
+    let wall = SKSpriteNode(color: .gray, size: size)
+    wall.position = position
+    wall.physicsBody = SKPhysicsBody(rectangleOf: size)
+    wall.physicsBody?.categoryBitMask = wallCategory
+    wall.physicsBody?.collisionBitMask = humanCategory | zombieCategory | wallCategory
+    wall.physicsBody?.contactTestBitMask = zombieCategory
+    
+    return wall
+}
+
+// Создание спрайта зараженного
+func createInfected(at position: CGPoint) -> SKSpriteNode {
+    let infected = SKSpriteNode(texture: humanTexture)
+    infected.position = position
+    infected.color = .red // Зараженный будет выделен красным цветом
+    infected.colorBlendFactor = 0.7
+    infected.physicsBody = SKPhysicsBody(circleOfRadius: humanTexture.size().width / 2)
+    infected.physicsBody?.categoryBitMask = zombieCategory
+    infected.physicsBody?.collisionBitMask = wallCategory | humanCategory | zombieCategory
+    infected.physicsBody?.contactTestBitMask = humanCategory
+    
+    return infected
+}
+
+// Обработка столкновений
+func didBegin(_ contact: SKPhysicsContact) {
+    if let human = contact.bodyA.node as? SKSpriteNode, human.physicsBody?.categoryBitMask == humanCategory,
+       let zombie = contact.bodyB.node as? SKSpriteNode, zombie.physicsBody?.categoryBitMask == zombieCategory {
+        // Если столкнулись человек и зомби, то человек заражается
+        let infected = createInfected(at: human.position)
+        addChild(infected)
+        human.removeFromParent()
+    } else if let zombie = contact.bodyA.node as? SKSpriteNode, zombie.physicsBody?.categoryBitMask == zombieCategory,
+              let human = contact.bodyB.node as? SKSpriteNode, human.physicsBody?.categoryBitMask == humanCategory {
+        // Если столкнулись зомби и человек, то зомби просто проходит мимо
+        let angle = atan2(human.position.y - zombie.position.y, human.position.x - zombie.position.x)
+        let direction = CGVector(dx: cos(angle) * zombieSpeed, dy: sin(angle) * zombieSpeed)
+        zombie.physicsBody?.velocity = direction
+    }
+}
+}
+// Обработка щелчка на экране
+override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    for touch in touches {
+        let location = touch.location(in: self)
+        
+        if let zombie = zombie {
+            // Если зомби уже создан, то задаем ему новую позицию
+            let angle = atan2(location.y - zombie.position.y, location.x - zombie.position.x)
+            let direction = CGVector(dx: cos(angle) * zombieSpeed, dy: sin(angle) * zombieSpeed)
+            zombie.physicsBody?.velocity = direction
+        } else {
+            // Если зомби еще не создан, то создаем нового зомби в заданной позиции
+            let zombie = createInfected(at: location)
+            addChild(zombie)
+            self.zombie = zombie
+        }
+    }
+}
+
+// Создание кнопки атаки
+func createAttackButton() {
+    let attackButton = SKSpriteNode(color: .red, size: CGSize(width: 50, height: 50))
+    attackButton.position = CGPoint(x: frame.maxX - attackButton.size.width / 2 - 20, y: frame.maxY - attackButton.size.height / 2 - 20)
+    attackButton.name = "attackButton"
+    addChild(attackButton)
+}
+
+// Обработка нажатия на кнопку атаки
+func attackButtonPressed() {
+    guard let zombie = zombie else { return }
+    
+    let zombies = children.filter { $0.physicsBody?.categoryBitMask == zombieCategory }
+    
+    for zombieNode in zombies {
+        if zombieNode != zombie {
+            let angle = atan2(zombieNode.position.y - zombie.position.y, zombieNode.position.x - zombie.position.x)
+            let direction = CGVector(dx: cos(angle) * zombieSpeed, dy: sin(angle) * zombieSpeed)
+            zombieNode.physicsBody?.velocity = direction
+        }
+    }
+}
+
+// Обработка движения синих
+func moveHumans() {
+    let humans = children.filter { $0.physicsBody?.categoryBitMask == humanCategory }
+    
+    for human in humans {
+        if let humanBody = human.physicsBody {
+            var isHumanMoving = false
+            
+            let zombies = children.filter { $0.physicsBody?.categoryBitMask == zombieCategory }
+            for zombie in zombies {
+                if let zombieBody = zombie.physicsBody {
+                    let distance = hypot(human.position.x - zombie.position.x, human.position.y - zombie.position.y)
+                    if distance < zombieDetectionRadius {
+                        let angle = atan2(human.position.y - zombie.position.y, human.position.x - zombie.position.x)
+                        let direction = CGVector(dx: cos(angle) * humanSpeed, dy: sin(angle) * humanSpeed)
+                        humanBody.velocity = direction
+                        isHumanMoving = true
+                        break
+                    }
+                }
+            }
+            
+            if !isHumanMoving {
+                humanBody.velocity = .zero
+            }
+        }
+    }
+}
+
+// Главный цикл игры
+override func update(_ currentTime: TimeInterval) {
+    moveHumans()
+}
+}
